@@ -1,0 +1,57 @@
+{
+  "contextWindow": 200000,
+  "maxTokens": 65536,
+  "maxAttempts": 6,
+  "sets": [
+    {
+      "name": "opus",
+      "models": [
+        {
+          "name": "glm-5.3",
+          "provider": "zai",
+          "api": "openai-completions",
+          "baseUrl": "https://api.z.ai/api/coding/paas/v4",
+          "apiKey": "$ZAI_API_KEY",
+          "model": "glm-5.3",
+          "reasoning": true,
+          "contextWindow": 1000000,
+          "maxTokens": 65536,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "compat": { "thinkingFormat": "zai", "zaiToolStream": true, "supportsDeveloperRole": false }
+        },
+        {
+          "name": "kimi-k3",
+          "provider": "moonshotai",
+          "api": "openai-completions",
+          "baseUrl": "https://api.moonshot.ai/v1",
+          "apiKey": "$MOONSHOT_API_KEY",
+          "model": "kimi-k3",
+          "reasoning": true,
+          "contextWindow": 1000000,
+          "maxTokens": 65536,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "compat": { "supportsUsageInStreaming": false, "maxTokensField": "max_tokens" }
+        }
+      ]
+    },
+    {
+      "name": "sonnet",
+      "models": [
+        {
+          "name": "deepseek-v4-pro",
+          "provider": "deepseek",
+          "api": "openai-completions",
+          "baseUrl": "https://api.deepseek.com",
+          "apiKey": "$DEEPSEEK_API_KEY",
+          "model": "deepseek-v4-pro",
+          "reasoning": true,
+          "contextWindow": 1000000,
+          "maxTokens": 65536,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "thinkingLevelMap": { "minimal": "high", "low": "high", "medium": "high", "high": "high", "xhigh": "max" },
+          "compat": { "requiresReasoningContentOnAssistantMessages": true, "thinkingFormat": "deepseek" }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "pi-failover",
+  "version": "1.0.0",
+  "description": "A pi provider extension that fails over across an ordered list of compatible models (grouped into capability classes) when a provider runs out of credits or errors, so agent runs never stop when one wallet empties.",
+  "keywords": ["pi-package", "pi", "failover", "model", "provider", "llm", "fallback"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": ["./extensions/failover.ts"]
+  }
+}
