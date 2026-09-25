@@ -136,14 +136,15 @@ const DEFAULT_CONFIG: FailoverConfig = {
 };
 
 function loadConfig(): FailoverConfig {
-  if (existsSync(CONFIG_PATH)) {
+  const configPath = process.env.FAILOVER_CONFIG || CONFIG_PATH;
+  if (existsSync(configPath)) {
     try {
-      const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
+      const raw = JSON.parse(readFileSync(configPath, "utf8"));
       if (raw && Array.isArray(raw.sets) && raw.sets.length > 0) {
         return { ...DEFAULT_CONFIG, ...raw };
       }
     } catch (e) {
-      console.warn(`[failover] could not parse ${CONFIG_PATH}: ${(e as Error).message}`);
+      console.warn(`[failover] could not parse ${configPath}: ${(e as Error).message}`);
     }
   }
   return DEFAULT_CONFIG;
