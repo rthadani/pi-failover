@@ -2,6 +2,8 @@
 
 A [pi](https://pi.dev) provider extension that keeps agent runs alive when a model provider runs out of credits or errors. It registers a set of models under the `failover` provider, grouped into **compatibility classes**. When the model in use fails, the request is retried on the next model in the *same class*, wrapping around, so the run never stops when one wallet empties.
 
+The serving backend is always shown in the status bar: `failover: glm-5.3 (zai)` when the requested model is serving, or `auto → glm-5.3 (zai)` when it differs (including `auto`, which resolves to the first backend of the first set). The line updates on every attempt, so a mid-request failover is visible too.
+
 ## How it works
 
 - Models are grouped into `sets` (capability classes: e.g. `opus`, `sonnet`, `coding`, `flash`).
@@ -60,7 +62,7 @@ Create `~/.pi/agent/failover.json` (or point `FAILOVER_CONFIG` at another path).
 | `provider` | Display/origin provider (informational). |
 | `api` | One of `openai-completions`, `openai-responses`, `anthropic-messages`. Match the provider's real API. |
 | `baseUrl` | Endpoint for the provider. |
-| `apiKey` | `$ENV_VAR` / `${ENV_VAR}` reference, literal, or `!command`. |
+| `apiKey` | `$ENV_VAR` / `${ENV_VAR}` reference, or a literal value. |
 | `model` | The actual model id sent to the provider. |
 | `contextWindow` / `maxTokens` | Caps used for compaction and output limits. |
 | `cost` | Per-1M-token rates (display/telemetry only). |

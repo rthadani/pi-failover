@@ -44,10 +44,14 @@ import {
   type SimpleStreamOptions,
   type TranscriptContext,
 } from "@earendil-works/pi-ai/compat";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+
+let statusUi: ExtensionUIContext | null = null;
+// Mirror of pi's session-mode union; the package root does not re-export this type.
+let statusMode: "tui" | "rpc" | "json" | "print" | null = null;
 
 type BackendApi = "openai-completions" | "openai-responses" | "anthropic-messages";
 
@@ -77,6 +81,17 @@ interface FailoverConfig {
   maxTokens?: number;
   maxAttempts?: number;
   sets: FailoverSet[];
+}
+
+/** Only the TUI renders a status bar; rpc/json/print sessions silently skip. */
+function setStatus(text: string): void {
+  if (statusUi && statusMode === "tui") statusUi.setStatus("failover", text);
+}
+
+/** `failover: <name> (<provider>)` when the requested model is serving, else `<requested> → <name> (<provider>)`. */
+function statusText(requested: string, backend: Backend): string {
+  const serving = `${backend.name} (${backend.provider ?? "failover"})`;
+  return backend.name === requested ? `failover: ${serving}` : `${requested} → ${serving}`;
 }
 
 const CONFIG_PATH = join(homedir(), ".pi", "agent", "failover.json");
@@ -235,6 +250,7 @@ function streamFailover(
 
     for (let i = 0; i < maxAttempts; i++) {
       const backend = ring[(startIndex + i) % total];
+      setStatus(statusText(model.id, backend));
       const apiKey = resolveApiKey(backend.apiKey);
       if (!apiKey) {
         lastMessage = `no API key for "${backend.name}" (${backend.apiKey})`;
@@ -249,7 +265,6 @@ function streamFailover(
 
       if (result.status === "fatal") {
         lastFatal = result.event;
-        lastMessage = result.message;
         break; // don't loop on non-retryable errors
       }
 
@@ -353,6 +368,16 @@ function toModelConfig(b: Backend, id: string, name: string, config: FailoverCon
 }
 
 export default function (pi: ExtensionAPI) {
+  pi.on("session_start", (_e, ctx) => {
+    statusUi = ctx.ui;
+    statusMode = ctx.mode;
+  });
+  pi.on("session_shutdown", () => {
+    statusUi?.setStatus("failover", undefined);
+    statusUi = null;
+    statusMode = null;
+  });
+
   const config = loadConfig();
   const seen = new Set<string>();
   const allBackends = config.sets
