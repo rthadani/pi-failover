@@ -71,6 +71,30 @@ Create `~/.pi/agent/failover.json` (or point `FAILOVER_CONFIG` at another path).
 - `FAILOVER_CONFIG` — override the config path (default `~/.pi/agent/failover.json`).
 - Provider keys referenced by `apiKey` entries (e.g. `DEEPSEEK_API_KEY`, `ZAI_API_KEY`).
 
+## Select a model at runtime (subagent API)
+
+The subagent API accepts a `model` argument per spawn, so you can pick a failover class at runtime and override the session default for that one run. Pass `failover/<name>` (provider/id form, not a bare id), where `<name>` is any model name from your `failover.json`:
+
+```ts
+// run the implementation agent in the coding class
+subagent({ agent: "worker", model: "failover/kimi-k2.7-code", task: "..." })
+
+// design/reasoning in the opus class
+subagent({ agent: "oracle", model: "failover/glm-5.3", task: "..." })
+
+// fast, cheap recon in the flash class
+subagent({ agent: "scout", model: "failover/glm-5.3-flash", task: "..." })
+```
+
+The model you pass starts that run in its own set, and failover stays circular *within* that set. The usual entry per class is the first model of the set:
+
+- `opus` → `failover/glm-5.3`
+- `sonnet` → `failover/deepseek-v4-pro`
+- `coding` → `failover/kimi-k2.7-code`
+- `flash` → `failover/glm-5.3-flash`
+
+Omit `model` to inherit the session model. This is a normal per-spawn override — no extra permission or config needed.
+
 ## Notes
 
 - If you previously installed a personal copy of `failover.ts` under `~/.pi/agent/extensions/`, remove it after installing this package to avoid registering the `failover` provider twice.
