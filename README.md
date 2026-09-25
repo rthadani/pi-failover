@@ -14,7 +14,7 @@ A [pi](https://pi.dev) provider extension that keeps agent runs alive when a mod
 
 ```bash
 pi install npm:pi-failover            # after publishing
-pi install git:github.com/<you>/pi-failover@v1
+pi install git:github.com/rthadani/pi-failover@v1
 pi install ./pi-failover              # local directory
 ```
 

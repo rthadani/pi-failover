@@ -79,11 +79,8 @@ interface FailoverConfig {
   sets: FailoverSet[];
 }
 
-const CONFIG_PATH = process.env.FAILOVER_CONFIG ?? join(homedir(), ".pi", "agent", "failover.json");
+const CONFIG_PATH = join(homedir(), ".pi", "agent", "failover.json");
 
-// Generic fallback when no failover.json exists. Users should write their own
-// config (see README) — this example only exists so the provider loads with
-// at least one backend instead of erroring.
 const DEFAULT_CONFIG: FailoverConfig = {
   contextWindow: 200000,
   maxTokens: 65536,
@@ -92,16 +89,31 @@ const DEFAULT_CONFIG: FailoverConfig = {
       name: "primary",
       models: [
         {
-          name: "example-openai",
-          provider: "openai",
-          api: "openai-responses",
-          baseUrl: "https://api.openai.com/v1",
-          apiKey: "$OPENAI_API_KEY",
-          model: "gpt-5",
+          name: "deepseek-v4-pro",
+          provider: "deepseek",
+          api: "openai-completions",
+          baseUrl: "https://api.deepseek.com",
+          apiKey: "$DEEPSEEK_API_KEY",
+          model: "deepseek-v4-pro",
+          reasoning: true,
+          contextWindow: 1000000,
+          maxTokens: 65536,
+          cost: { input: 1.74, output: 3.48, cacheRead: 0.145, cacheWrite: 0 },
+          thinkingLevelMap: { minimal: "high", low: "high", medium: "high", high: "high", xhigh: "max" },
+          compat: { requiresReasoningContentOnAssistantMessages: true, thinkingFormat: "deepseek" },
+        },
+        {
+          name: "glm-5.3-flash",
+          provider: "zai",
+          api: "openai-completions",
+          baseUrl: "https://api.z.ai/api/coding/paas/v4",
+          apiKey: "$ZAI_API_KEY",
+          model: "glm-5.3-flash",
           reasoning: true,
           contextWindow: 200000,
           maxTokens: 65536,
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          compat: { thinkingFormat: "zai", zaiToolStream: true, supportsDeveloperRole: false },
         },
       ],
     },
@@ -221,8 +233,8 @@ function streamFailover(
     let lastMessage = "No backends configured";
     let lastFatal: AssistantMessageEvent | null = null;
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const backend = ring[(startIndex + attempt) % total];
+    for (let i = 0; i < maxAttempts; i++) {
+      const backend = ring[(startIndex + i) % total];
       const apiKey = resolveApiKey(backend.apiKey);
       if (!apiKey) {
         lastMessage = `no API key for "${backend.name}" (${backend.apiKey})`;
@@ -243,7 +255,7 @@ function streamFailover(
 
       lastMessage = result.message;
       console.warn(
-        `[failover] ${backend.name} failed (${result.message}); trying next backend (${attempt + 1}/${maxAttempts})`,
+        `[failover] ${backend.name} failed (${result.message}); trying next backend (${i + 1}/${maxAttempts})`,
       );
     }
 
