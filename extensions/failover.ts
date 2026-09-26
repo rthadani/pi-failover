@@ -10,12 +10,15 @@
  * compact instead.
  *
  * Selecting a model:
- *   - `failover/auto`            → first model of the first set (convenience)
+ *   - `failover/auto`            → the configured `default` (set name or model
+ *                                  name), falling back to the first model of the
+ *                                  first set when unset or unresolvable
  *   - `failover/<model-name>`    → that model, failing over within its set
  *
  * Config (~/.pi/agent/failover.json):
  *   {
  *     "contextWindow": 200000, "maxTokens": 65536, "maxAttempts": 4,
+ *     "default": "primary",  // set or model name that `auto` resolves to
  *     "sets": [
  *       { "name": "primary", "models": [
  *           { "name": "deepseek-v4-pro", "provider": "deepseek",
@@ -80,6 +83,7 @@ interface FailoverConfig {
   contextWindow?: number;
   maxTokens?: number;
   maxAttempts?: number;
+  default?: string;
   sets: FailoverSet[];
 }
 
@@ -298,9 +302,24 @@ function resolveRing(config: FailoverConfig, modelId: string): { ring: Backend[]
     const idx = set.models.findIndex((b) => b.name === modelId);
     if (idx >= 0) return { ring: set.models, startIndex: idx };
   }
-  // "auto" or unknown id → first set, first model
-  const firstSet = config.sets[0];
-  return { ring: firstSet?.models ?? [], startIndex: 0 };
+  // "auto" or unknown id → the configured default, else first set, first model
+  return resolveDefault(config) ?? { ring: config.sets[0]?.models ?? [], startIndex: 0 };
+}
+
+/**
+ * Resolve the config's optional `default`: a set name (that set, first model)
+ * or a model name (its set, starting at that model). Set names win on collision.
+ */
+function resolveDefault(config: FailoverConfig): { ring: Backend[]; startIndex: number } | null {
+  const name = typeof config.default === "string" ? config.default.trim() : "";
+  if (!name) return null;
+  const set = config.sets.find((s) => s.name === name);
+  if (set) return { ring: set.models, startIndex: 0 };
+  for (const s of config.sets) {
+    const idx = s.models.findIndex((b) => b.name === name);
+    if (idx >= 0) return { ring: s.models, startIndex: idx };
+  }
+  return null;
 }
 
 async function attempt(
@@ -380,6 +399,9 @@ export default function (pi: ExtensionAPI) {
   });
 
   const config = loadConfig();
+  if (config.default && !resolveDefault(config)) {
+    console.warn(`[failover] default "${config.default}" matches no set or model; using the first set`);
+  }
   const seen = new Set<string>();
   const allBackends = config.sets
     .flatMap((s) => s.models)
@@ -388,11 +410,12 @@ export default function (pi: ExtensionAPI) {
       seen.add(b.name);
       return true;
     });
-  const first = allBackends[0];
+  const autoRing = resolveRing(config, "auto");
+  const first = autoRing.ring[autoRing.startIndex] ?? allBackends[0];
 
   const models = [];
   if (first) {
-    models.push(toModelConfig(first, "auto", "Auto (failover)", config));
+    models.push(toModelConfig(first, "auto", `Auto (failover → ${first.name})`, config));
   }
   for (const backend of allBackends) {
     models.push(toModelConfig(backend, backend.name, `Failover · ${backend.name}`, config));
