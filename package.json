@@ -1,9 +1,19 @@
 {
-  "name": "pi-failover",
+  "name": "@rthadani/pi-failover",
   "version": "1.0.0",
   "description": "A pi provider extension that fails over across an ordered list of compatible models (grouped into capability classes) when a provider runs out of credits or errors, so agent runs never stop when one wallet empties.",
   "keywords": ["pi-package", "pi", "failover", "model", "provider", "llm", "fallback"],
   "license": "MIT",
+  "author": "Rohit Thadani <rohit.thadani@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rthadani/pi-failover.git"
+  },
+  "homepage": "https://github.com/rthadani/pi-failover#readme",
+  "bugs": {
+    "url": "https://github.com/rthadani/pi-failover/issues"
+  },
+  "files": ["extensions", "examples", "README.md"],
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*"

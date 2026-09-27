@@ -2,6 +2,7 @@
   "contextWindow": 200000,
   "maxTokens": 65536,
   "maxAttempts": 6,
+  "default": "sonnet",
   "sets": [
     {
       "name": "opus",
@@ -16,7 +17,7 @@
           "reasoning": true,
           "contextWindow": 1000000,
           "maxTokens": 65536,
-          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0, "cacheWrite": 0 },
           "compat": { "thinkingFormat": "zai", "zaiToolStream": true, "supportsDeveloperRole": false }
         },
         {
@@ -29,8 +30,20 @@
           "reasoning": true,
           "contextWindow": 1000000,
           "maxTokens": 65536,
-          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "cost": { "input": 3, "output": 15, "cacheRead": 0, "cacheWrite": 0 },
           "compat": { "supportsUsageInStreaming": false, "maxTokensField": "max_tokens" }
+        },
+        {
+          "name": "MiniMax-M3",
+          "provider": "minimax",
+          "api": "anthropic-messages",
+          "baseUrl": "https://api.minimax.io/anthropic",
+          "apiKey": "$MINIMAX_API_KEY",
+          "model": "MiniMax-M3",
+          "reasoning": true,
+          "contextWindow": 1000000,
+          "maxTokens": 65536,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
         }
       ]
     },
@@ -47,8 +60,109 @@
           "reasoning": true,
           "contextWindow": 1000000,
           "maxTokens": 65536,
-          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "cost": { "input": 1.74, "output": 3.48, "cacheRead": 0.145, "cacheWrite": 0 },
           "thinkingLevelMap": { "minimal": "high", "low": "high", "medium": "high", "high": "high", "xhigh": "max" },
+          "compat": { "requiresReasoningContentOnAssistantMessages": true, "thinkingFormat": "deepseek" }
+        },
+        {
+          "name": "kimi-k2.6",
+          "provider": "moonshotai",
+          "api": "openai-completions",
+          "baseUrl": "https://api.moonshot.ai/v1",
+          "apiKey": "$MOONSHOT_API_KEY",
+          "model": "kimi-k2.6",
+          "reasoning": true,
+          "contextWindow": 200000,
+          "maxTokens": 65536,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "compat": { "supportsUsageInStreaming": false, "maxTokensField": "max_tokens" }
+        },
+        {
+          "name": "MiniMax-M2.7",
+          "provider": "minimax",
+          "api": "anthropic-messages",
+          "baseUrl": "https://api.minimax.io/anthropic",
+          "apiKey": "$MINIMAX_API_KEY",
+          "model": "MiniMax-M2.7",
+          "reasoning": true,
+          "contextWindow": 200000,
+          "maxTokens": 65536,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+        }
+      ]
+    },
+    {
+      "name": "coding",
+      "models": [
+        {
+          "name": "kimi-k2.7-code",
+          "provider": "moonshotai",
+          "api": "openai-completions",
+          "baseUrl": "https://api.moonshot.ai/v1",
+          "apiKey": "$MOONSHOT_API_KEY",
+          "model": "kimi-k2.7-code",
+          "reasoning": true,
+          "contextWindow": 200000,
+          "maxTokens": 65536,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "compat": { "supportsUsageInStreaming": false, "maxTokensField": "max_tokens" }
+        },
+        {
+          "name": "kimi-k2.7-code-highspeed",
+          "provider": "moonshotai",
+          "api": "openai-completions",
+          "baseUrl": "https://api.moonshot.ai/v1",
+          "apiKey": "$MOONSHOT_API_KEY",
+          "model": "kimi-k2.7-code-highspeed",
+          "reasoning": true,
+          "contextWindow": 200000,
+          "maxTokens": 65536,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "compat": { "supportsUsageInStreaming": false, "maxTokensField": "max_tokens" }
+        },
+        {
+          "name": "deepseek-v4-flash",
+          "provider": "deepseek",
+          "api": "openai-completions",
+          "baseUrl": "https://api.deepseek.com",
+          "apiKey": "$DEEPSEEK_API_KEY",
+          "model": "deepseek-v4-flash",
+          "reasoning": true,
+          "contextWindow": 1000000,
+          "maxTokens": 65536,
+          "cost": { "input": 1.74, "output": 3.48, "cacheRead": 0.145, "cacheWrite": 0 },
+          "thinkingLevelMap": { "minimal": "high", "low": "high", "medium": "high", "high": "high", "xhigh": "max" },
+          "compat": { "requiresReasoningContentOnAssistantMessages": true, "thinkingFormat": "deepseek" }
+        }
+      ]
+    },
+    {
+      "name": "flash",
+      "models": [
+        {
+          "name": "glm-5.3-flash",
+          "provider": "zai",
+          "api": "openai-completions",
+          "baseUrl": "https://api.z.ai/api/coding/paas/v4",
+          "apiKey": "$ZAI_API_KEY",
+          "model": "glm-5.3-flash",
+          "reasoning": true,
+          "contextWindow": 1000000,
+          "maxTokens": 65536,
+          "cost": { "input": 0.075, "output": 0.25, "cacheRead": 0, "cacheWrite": 0 },
+          "compat": { "thinkingFormat": "zai", "zaiToolStream": true, "supportsDeveloperRole": false }
+        },
+        {
+          "name": "deepseek-v4-flash",
+          "provider": "deepseek",
+          "api": "openai-completions",
+          "baseUrl": "https://api.deepseek.com",
+          "apiKey": "$DEEPSEEK_API_KEY",
+          "model": "deepseek-v4-flash",
+          "reasoning": true,
+          "contextWindow": 1000000,
+          "maxTokens": 65536,
+          "cost": { "input": 0.14, "output": 0.28, "cacheRead": 0.028, "cacheWrite": 0 },
           "compat": { "requiresReasoningContentOnAssistantMessages": true, "thinkingFormat": "deepseek" }
         }
       ]
