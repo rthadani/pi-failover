@@ -391,6 +391,7 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", (_e, ctx) => {
     statusUi = ctx.ui;
     statusMode = ctx.mode;
+    if (first) setStatus(statusText("auto", first));
   });
   pi.on("session_shutdown", () => {
     statusUi?.setStatus("failover", undefined);
