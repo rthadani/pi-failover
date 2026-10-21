@@ -176,6 +176,16 @@ function isContextOverflow(message: string): boolean {
   );
 }
 
+/**
+ * An aborted request is terminal: the user pressed ESC, so retrying it on the
+ * next backend would just re-run a cancelled request. pi-ai surfaces the
+ * abort either as an error event with reason "aborted" or as a thrown
+ * "Request was aborted".
+ */
+function isAborted(message: string, signal?: AbortSignal): boolean {
+  return signal?.aborted === true || /\baborted\b/i.test(message);
+}
+
 function buildInnerModel(model: Model<Api>, b: Backend): Model<Api> {
   return {
     ...model,
@@ -211,10 +221,14 @@ function innerStream(
   }
 }
 
-function synthError(model: Model<Api>, errorMessage: string): AssistantMessageEvent {
+function synthError(
+  model: Model<Api>,
+  errorMessage: string,
+  reason: "error" | "aborted" = "error",
+): AssistantMessageEvent {
   return {
     type: "error",
-    reason: "error",
+    reason,
     error: {
       role: "assistant",
       content: [],
@@ -229,7 +243,7 @@ function synthError(model: Model<Api>, errorMessage: string): AssistantMessageEv
         totalTokens: 0,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
       },
-      stopReason: "error",
+      stopReason: reason,
       errorMessage,
       timestamp: Date.now(),
     },
@@ -343,6 +357,9 @@ async function attempt(
     inner = innerStream(backend.api, model, context, opts);
   } catch (e) {
     const msg = String((e as Error)?.message ?? e);
+    if (isAborted(msg, opts.signal)) {
+      return { status: "fatal", event: synthError(model, msg, "aborted") };
+    }
     return isContextOverflow(msg)
       ? { status: "fatal", event: synthError(model, msg) }
       : { status: "fallthrough", message: msg };
@@ -355,6 +372,10 @@ async function attempt(
         if (event.type === "start") {
           started = true;
         } else if (event.type === "error") {
+          if (event.reason === "aborted") {
+            // The request was cancelled; forward the provider's abort event as-is.
+            return { status: "fatal", event };
+          }
           const msg = event.error?.errorMessage ?? "Unknown error";
           return isContextOverflow(msg)
             ? { status: "fatal", event }
@@ -375,9 +396,11 @@ async function attempt(
       outer.end();
       return { status: "done" };
     }
-    return isContextOverflow(msg)
-      ? { status: "fatal", event: synthError(model, msg) }
-      : { status: "fallthrough", message: msg };
+    return isAborted(msg, opts.signal)
+      ? { status: "fatal", event: synthError(model, msg, "aborted") }
+      : isContextOverflow(msg)
+        ? { status: "fatal", event: synthError(model, msg) }
+        : { status: "fallthrough", message: msg };
   }
 }
 
