@@ -2,7 +2,7 @@
 
 A [pi](https://pi.dev) provider extension that keeps agent runs alive when a model provider runs out of credits or errors. It registers a set of models under the `failover` provider, grouped into **compatibility classes**. When the model in use fails, the request is retried on the next model in the *same class*, wrapping around, so the run never stops when one wallet empties.
 
-The serving backend is always shown in the status bar: `failover: glm-5.3 (zai)` when the requested model is serving, or `auto → glm-5.3 (zai)` when it differs (including `auto`, which resolves to the first backend of the first set). The line updates on every attempt, so a mid-request failover is visible too.
+The serving backend is always shown in the status bar: `failover: strong-model (example-provider)` when the requested model is serving, or `auto → strong-model (example-provider)` when it differs (including `auto`, which resolves to the first backend of the first set). The line updates on every attempt, so a mid-request failover is visible too.
 
 ## How it works
 
@@ -37,17 +37,17 @@ Create `~/.pi/agent/failover.json` (or point `FAILOVER_CONFIG` at another path).
       "name": "opus",
       "models": [
         {
-          "name": "glm-5.3",
-          "provider": "zai",
+          "name": "strong-model",
+          "provider": "example-provider",
           "api": "openai-completions",
-          "baseUrl": "https://api.z.ai/api/coding/paas/v4",
-          "apiKey": "$ZAI_API_KEY",
-          "model": "glm-5.3",
+          "baseUrl": "https://api.example.com/v1",
+          "apiKey": "$YOUR_API_KEY",
+          "model": "strong-model",
           "reasoning": true,
           "contextWindow": 1000000,
           "maxTokens": 65536,
           "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-          "compat": { "thinkingFormat": "zai", "zaiToolStream": true, "supportsDeveloperRole": false }
+          "compat": { "supportsUsageInStreaming": false, "maxTokensField": "max_tokens" }
         }
       ]
     }
@@ -72,7 +72,7 @@ Create `~/.pi/agent/failover.json` (or point `FAILOVER_CONFIG` at another path).
 ### Environment
 
 - `FAILOVER_CONFIG` — override the config path (default `~/.pi/agent/failover.json`).
-- Provider keys referenced by `apiKey` entries (e.g. `DEEPSEEK_API_KEY`, `ZAI_API_KEY`).
+- Provider keys referenced by `apiKey` entries (e.g. `YOUR_API_KEY`).
 
 ## Select a model at runtime (subagent API)
 
@@ -80,21 +80,16 @@ The subagent API accepts a `model` argument per spawn, so you can pick a failove
 
 ```ts
 // run the implementation agent in the coding class
-subagent({ agent: "worker", model: "failover/kimi-k2.7-code", task: "..." })
+subagent({ agent: "worker", model: "failover/code-model", task: "..." })
 
 // design/reasoning in the opus class
-subagent({ agent: "oracle", model: "failover/glm-5.3", task: "..." })
+subagent({ agent: "oracle", model: "failover/strong-model", task: "..." })
 
 // fast, cheap recon in the flash class
-subagent({ agent: "scout", model: "failover/glm-5.3-flash", task: "..." })
+subagent({ agent: "scout", model: "failover/fast-model", task: "..." })
 ```
 
-The model you pass starts that run in its own set, and failover stays circular *within* that set. The usual entry per class is the first model of the set:
-
-- `opus` → `failover/glm-5.3`
-- `sonnet` → `failover/deepseek-v4-pro`
-- `coding` → `failover/kimi-k2.7-code`
-- `flash` → `failover/glm-5.3-flash`
+The model you pass starts that run in its own set, and failover stays circular *within* that set. The entry point for a class is whichever backend that class lists first, so the mapping lives in your own `failover.json` rather than in this document.
 
 Omit `model` to inherit the session model. This is a normal per-spawn override — no extra permission or config needed.
 
