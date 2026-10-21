@@ -35,7 +35,6 @@
  *   }
  */
 
-const PROVIDER_API = "openai-completions";
 import {
   type Api,
   type AssistantMessageEvent,
@@ -100,6 +99,15 @@ function statusText(requested: string, backend: Backend): string {
 }
 
 const CONFIG_PATH = join(homedir(), ".pi", "agent", "failover.json");
+
+/**
+ * pi dispatches a model to an extension's streamSimple only when the model's
+ * api equals the provider's api (see pi's provider-composer). Every failover
+ * model must therefore advertise this api, or pi bypasses this extension and
+ * failover/auto silently loses its rotation. The per-backend protocol stays in
+ * Backend.api and is applied by buildInnerModel for the real HTTP call.
+ */
+const PROVIDER_API = "openai-completions";
 
 const DEFAULT_CONFIG: FailoverConfig = {
   contextWindow: 200000,
