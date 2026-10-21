@@ -10,6 +10,7 @@ The serving backend is always shown in the status bar: `failover: glm-5.3 (zai)`
 - Each model is selectable as `failover/<name>`, plus a convenience `failover/auto` (first model of the first set).
 - On a request that fails *before any content streams* (quota, credits, 403, auth, connection, 5xx), the extension retries the **next model in the same set**, circularly, up to `maxAttempts`.
 - **Context-overflow** errors are *not* retried — they pass through so pi can compact the conversation instead.
+- **Aborted** requests (you pressed ESC) are *not* retried either — they are forwarded as-is.
 - Failover never crosses sets: a model only falls back to peers in its own class.
 
 ## Install

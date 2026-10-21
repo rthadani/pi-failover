@@ -7,7 +7,8 @@
  * retried on the NEXT model in the same set, wrapping around, up to
  * `maxAttempts` total attempts (default: 2 full passes of the set).
  * Context-overflow errors are NOT retried: they pass through so pi can
- * compact instead.
+ * compact instead. Aborted requests (the user pressed ESC) are NOT retried
+ * either; they are forwarded as-is.
  *
  * Selecting a model:
  *   - `failover/auto`            → the configured `default` (set name or model
@@ -102,8 +103,9 @@ const CONFIG_PATH = join(homedir(), ".pi", "agent", "failover.json");
 
 /**
  * pi dispatches a model to an extension's streamSimple only when the model's
- * api equals the provider's api (see pi's provider-composer). Every failover
- * model must therefore advertise this api, or pi bypasses this extension and
+ * api equals the provider's api (the gate is `model.api === extension.api`;
+ * see pi-coding-agent/dist/core/provider-composer.js). Every failover model
+ * must therefore advertise this api, or pi bypasses this extension and
  * failover/auto silently loses its rotation. The per-backend protocol stays in
  * Backend.api and is applied by buildInnerModel for the real HTTP call.
  */
@@ -180,10 +182,26 @@ function isContextOverflow(message: string): boolean {
  * An aborted request is terminal: the user pressed ESC, so retrying it on the
  * next backend would just re-run a cancelled request. pi-ai surfaces the
  * abort either as an error event with reason "aborted" or as a thrown
- * "Request was aborted".
+ * "Request was aborted" / "Request aborted".
+ *
+ * The structured `event.reason === "aborted"` branch in attempt() is the
+ * PRIMARY abort path: pi-ai turns provider failures into error events rather
+ * than throwing them, so the text match below only covers the throw path.
+ * Match the request-abort phrase only, so an unrelated provider error whose
+ * body happens to contain the word "aborted" still rotates.
  */
 function isAborted(message: string, signal?: AbortSignal): boolean {
-  return signal?.aborted === true || /\baborted\b/i.test(message);
+  return signal?.aborted === true || /\brequest (?:was )?aborted\b/i.test(message);
+}
+
+/**
+ * Shared classification for a thrown failure: an abort and a context
+ * overflow are terminal, anything else is retryable on the next backend.
+ */
+function classifyFailure(model: Model<Api>, msg: string, signal?: AbortSignal): AttemptResult {
+  if (isAborted(msg, signal)) return { status: "fatal", event: synthError(model, msg, "aborted") };
+  if (isContextOverflow(msg)) return { status: "fatal", event: synthError(model, msg) };
+  return { status: "fallthrough", message: msg };
 }
 
 function buildInnerModel(model: Model<Api>, b: Backend): Model<Api> {
@@ -357,12 +375,7 @@ async function attempt(
     inner = innerStream(backend.api, model, context, opts);
   } catch (e) {
     const msg = String((e as Error)?.message ?? e);
-    if (isAborted(msg, opts.signal)) {
-      return { status: "fatal", event: synthError(model, msg, "aborted") };
-    }
-    return isContextOverflow(msg)
-      ? { status: "fatal", event: synthError(model, msg) }
-      : { status: "fallthrough", message: msg };
+    return classifyFailure(model, msg, opts.signal);
   }
 
   let started = false;
@@ -386,21 +399,24 @@ async function attempt(
       }
       outer.push(event);
     }
-    if (started) outer.end();
+    if (started) {
+      outer.end();
+      return { status: "done" };
+    }
+    // The backend ended without emitting a single event. Ending the outer
+    // stream here is what keeps pi from waiting forever on a silent backend.
+    outer.push(synthError(model, "Backend produced no response"));
+    outer.end();
     return { status: "done" };
   } catch (e) {
     const msg = String((e as Error)?.message ?? e);
     if (started) {
       // Mid-stream failure: content already streamed, cannot fail over.
-      outer.push(synthError(model, msg));
+      outer.push(synthError(model, msg, isAborted(msg, opts.signal) ? "aborted" : "error"));
       outer.end();
       return { status: "done" };
     }
-    return isAborted(msg, opts.signal)
-      ? { status: "fatal", event: synthError(model, msg, "aborted") }
-      : isContextOverflow(msg)
-        ? { status: "fatal", event: synthError(model, msg) }
-        : { status: "fallthrough", message: msg };
+    return classifyFailure(model, msg, opts.signal);
   }
 }
 
