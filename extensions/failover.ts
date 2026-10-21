@@ -35,6 +35,7 @@
  *   }
  */
 
+const PROVIDER_API = "openai-completions";
 import {
   type Api,
   type AssistantMessageEvent,
@@ -376,7 +377,7 @@ function toModelConfig(b: Backend, id: string, name: string, config: FailoverCon
   return {
     id,
     name,
-    api: b.api,
+    api: PROVIDER_API,
     baseUrl: b.baseUrl,
     reasoning: b.reasoning ?? true,
     input: b.input ?? ["text"],
@@ -426,7 +427,7 @@ export default function (pi: ExtensionAPI) {
     name: "Failover",
     baseUrl: first?.baseUrl ?? "https://example.com",
     apiKey: first?.apiKey ?? "$DEEPSEEK_API_KEY",
-    api: "openai-completions",
+    api: PROVIDER_API,
     models,
     streamSimple: streamFailover,
   });
