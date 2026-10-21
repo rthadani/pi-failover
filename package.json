@@ -2,7 +2,15 @@
   "name": "@rthadani/pi-failover",
   "version": "1.0.0",
   "description": "A pi provider extension that fails over across an ordered list of compatible models (grouped into capability classes) when a provider runs out of credits or errors, so agent runs never stop when one wallet empties.",
-  "keywords": ["pi-package", "pi", "failover", "model", "provider", "llm", "fallback"],
+  "keywords": [
+    "pi-package",
+    "pi",
+    "failover",
+    "model",
+    "provider",
+    "llm",
+    "fallback"
+  ],
   "license": "MIT",
   "author": "Rohit Thadani <rohit.thadani@gmail.com>",
   "repository": {
@@ -13,12 +21,41 @@
   "bugs": {
     "url": "https://github.com/rthadani/pi-failover/issues"
   },
-  "files": ["extensions", "examples", "README.md"],
+  "files": [
+    "extensions",
+    "examples",
+    "README.md"
+  ],
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*"
   },
+  "overrides": {
+    "@aws-sdk/client-bedrock-runtime": "3.1127.0",
+    "@aws-sdk/core": "3.978.4",
+    "@aws-sdk/credential-provider-env": "3.972.75",
+    "@aws-sdk/credential-provider-http": "3.972.77",
+    "@aws-sdk/credential-provider-ini": "3.973.20",
+    "@aws-sdk/credential-provider-login": "3.972.82",
+    "@aws-sdk/credential-provider-node": "3.972.87",
+    "@aws-sdk/credential-provider-process": "3.972.75",
+    "@aws-sdk/credential-provider-sso": "3.973.19",
+    "@aws-sdk/credential-provider-web-identity": "3.972.81",
+    "@aws-sdk/eventstream-handler-node": "3.972.37",
+    "@aws-sdk/middleware-eventstream": "3.972.32",
+    "@aws-sdk/middleware-websocket": "3.972.57",
+    "@aws-sdk/nested-clients": "3.997.49",
+    "@aws-sdk/signature-v4-multi-region": "3.996.48",
+    "@aws-sdk/token-providers": "3.1127.0",
+    "@aws-sdk/types": "3.974.6",
+    "@aws-sdk/xml-builder": "3.972.41"
+  },
   "pi": {
-    "extensions": ["./extensions/failover.ts"]
+    "extensions": [
+      "./extensions/failover.ts"
+    ]
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "^1.3.0"
   }
 }

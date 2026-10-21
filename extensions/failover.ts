@@ -178,6 +178,20 @@ function isContextOverflow(message: string): boolean {
   );
 }
 
+/** True when any transcript message carries an image block (screenshots land in tool results). */
+function needsVision(context: TranscriptContext): boolean {
+  return context.messages.some((message) => {
+    const content = message.content;
+    if (typeof content === "string") return false;
+    return content.some((block) => block.type === "image");
+  });
+}
+
+/** True when the backend advertises image input (an absent `input` field means text-only). */
+function supportsVision(b: Backend): boolean {
+  return (b.input ?? ["text"]).includes("image");
+}
+
 /**
  * An aborted request is terminal: the user pressed ESC, so retrying it on the
  * next backend would just re-run a cancelled request. pi-ai surfaces the
@@ -280,15 +294,47 @@ function streamFailover(
 ): AssistantMessageEventStream {
   const outer = createAssistantMessageEventStream();
   const config = loadConfig();
-  const { ring, startIndex } = resolveRing(config, model.id);
-  const total = ring.length;
-  const maxAttempts = config.maxAttempts ?? Math.max(total * 2, 2);
+  const maxAttemptsFor = (n: number) => config.maxAttempts ?? Math.max(n * 2, 2);
+  const resolved = resolveRing(config, model.id);
+  let ring = resolved.ring;
+  let startIndex = resolved.startIndex;
+  const setName = resolved.setName;
+  let total = ring.length;
+  let maxAttempts = maxAttemptsFor(total);
 
   (async () => {
     if (total === 0) {
       outer.push(synthError(model, "No failover backends configured"));
       outer.end();
       return;
+    }
+
+    if (needsVision(context)) {
+      const circular = [...ring.slice(startIndex), ...ring.slice(0, startIndex)];
+      const eligible = circular.filter(supportsVision);
+      if (eligible.length === 0) {
+        const skippedNames = circular.map((b) => b.name).join(", ");
+        const setClause = setName ? ` in set "${setName}"` : "";
+        outer.push(
+          synthError(
+            model,
+            `No vision-capable backend${setClause}; skipped ${skippedNames} (text-only). Add "input": ["text","image"] to a backend or remove the images.`,
+            "error",
+          ),
+        );
+        outer.end();
+        return;
+      }
+      const skipped = circular.filter((b) => !supportsVision(b));
+      if (skipped.length > 0) {
+        console.warn(
+          `[failover] image input: skipping ${skipped.map((b) => b.name).join(", ")} (no image support); serving from ${eligible.map((b) => b.name).join(", ")}`,
+        );
+      }
+      ring = eligible;
+      startIndex = 0;
+      total = eligible.length;
+      maxAttempts = maxAttemptsFor(total);
     }
 
     let lastMessage = "No backends configured";
@@ -338,10 +384,13 @@ function streamFailover(
  * set containing it and start the circular retry at that model, so failure
  * falls through to the next model in the same set (never across sets).
  */
-function resolveRing(config: FailoverConfig, modelId: string): { ring: Backend[]; startIndex: number } {
+function resolveRing(
+  config: FailoverConfig,
+  modelId: string,
+): { ring: Backend[]; startIndex: number; setName?: string } {
   for (const set of config.sets) {
     const idx = set.models.findIndex((b) => b.name === modelId);
-    if (idx >= 0) return { ring: set.models, startIndex: idx };
+    if (idx >= 0) return { ring: set.models, startIndex: idx, setName: set.name };
   }
   // "auto" or unknown id → the configured default, else first set, first model
   return resolveDefault(config) ?? { ring: config.sets[0]?.models ?? [], startIndex: 0 };
