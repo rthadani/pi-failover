@@ -98,3 +98,13 @@ Omit `model` to inherit the session model. This is a normal per-spawn override �
 - If you previously installed a personal copy of `failover.ts` under `~/.pi/agent/extensions/`, remove it after installing this package to avoid registering the `failover` provider twice.
 - A backend whose `apiKey` resolves to empty is skipped automatically.
 - Mid-stream failures (after content has started) cannot be retracted; those surface as errors and the *next* request fails over.
+
+## Publishing
+
+Releases go to npm via [trusted publishing](https://docs.npmjs.com/granting-permissions-to-publish) (OpenID Connect). No npm token is stored in the repo: GitHub Actions requests a short-lived OIDC token and npm verifies it against the registered publisher.
+
+- **First release only:** npm cannot create a *new* package over OIDC, so publish `1.0.0` once from your machine (`npm publish --access public`).
+- Then register the trusted publisher on [npmjs.com](https://www.npmjs.com) under **Settings → Trusted Publishing → GitHub Actions**: owner `rthadani`, repository `pi-failover`, workflow `publish.yml`, environment empty. The workflow filename is part of that binding, so do not rename `.github/workflows/publish.yml`.
+- Tag a release with `git tag v1.0.0 && git push origin v1.0.0` to publish for real. The tag must match the `version` in `package.json`.
+- Manual dispatch (`workflow_dispatch`) defaults to a **dry run**; uncheck `dry_run` to actually publish.
+- Requirements: npm CLI `11.5.1` or newer, and the repository must be **public**.
