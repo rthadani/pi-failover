@@ -57,7 +57,24 @@ let statusUi: ExtensionUIContext | null = null;
 // Mirror of pi's session-mode union; the package root does not re-export this type.
 let statusMode: "tui" | "rpc" | "json" | "print" | null = null;
 
-type BackendApi = "openai-completions" | "openai-responses" | "anthropic-messages";
+// Delegated backends (claude-bridge) need another extension's streamSimple.
+// pi dispatches a model to a provider by `model.api === provider.api`, so those
+// stream functions live in the model registry, not pi-ai's api registry. The
+// registry is available from session_start in normal sessions.
+// The map is keyed by session id because pi-subagents runs child sessions
+// in-process, so a child's shutdown must not clear the parent's registry.
+type DelegateStreamSimple = (
+  model: Model<Api>,
+  context: TranscriptContext,
+  options?: SimpleStreamOptions,
+) => AssistantMessageEventStream;
+type DelegateRegistry = { getProvider(id: string): { streamSimple?: DelegateStreamSimple } | undefined };
+const liveRegistries = new Map<string, DelegateRegistry>();
+
+// "claude-bridge" is not an HTTP protocol: it delegates the turn to the pi
+// provider with that id (the pi-claude-bridge extension), whose own
+// streamSimple does the work. The backend's api doubles as the provider id.
+type BackendApi = "openai-completions" | "openai-responses" | "anthropic-messages" | "claude-bridge";
 
 interface Backend {
   name: string;
@@ -413,6 +430,20 @@ function innerStream(
     case "openai-responses":
       return openAIResponsesApi().streamSimple(model as Model<"openai-responses">, context, opts);
     case "openai-completions":
+      return openAICompletionsApi().streamSimple(model as Model<"openai-completions">, context, opts);
+    case "claude-bridge": {
+      // Delegated: use the first live session that has this provider registered.
+      // Throwing when none does is the cheap failure path: attempt() classifies it
+      // as a fallthrough, so an unregistered bridge rotates to the next backend
+      // instead of failing the run.
+      for (const registry of liveRegistries.values()) {
+        const streamSimple = registry.getProvider(api)?.streamSimple;
+        if (typeof streamSimple === "function") return streamSimple(model, context, opts);
+      }
+      throw new Error(
+        `backend api "${api}" delegates to provider "${api}", which is not registered in any live session`,
+      );
+    }
     default:
       return openAICompletionsApi().streamSimple(model as Model<"openai-completions">, context, opts);
   }
@@ -669,12 +700,14 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", (_e, ctx) => {
     statusUi = ctx.ui;
     statusMode = ctx.mode;
+    liveRegistries.set(ctx.sessionManager.getSessionId(), ctx.modelRegistry as unknown as DelegateRegistry);
     if (first) setStatus(statusText("auto", first));
   });
-  pi.on("session_shutdown", () => {
+  pi.on("session_shutdown", (_e, ctx) => {
     statusUi?.setStatus("failover", undefined);
     statusUi = null;
     statusMode = null;
+    liveRegistries.delete(ctx.sessionManager.getSessionId());
   });
 
   const config = loadConfig();

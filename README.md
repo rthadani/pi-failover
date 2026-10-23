@@ -61,9 +61,10 @@ Create `~/.pi/agent/failover.json` (or point `FAILOVER_CONFIG` at another path).
 |---|---|
 | `name` | Unique id; the model is exposed as `failover/<name>`. |
 | `provider` | Display/origin provider (informational). |
-| `api` | One of `openai-completions`, `openai-responses`, `anthropic-messages`. Match the provider's real API. |
-| `baseUrl` | Endpoint for the provider. |
-| `apiKey` | `$ENV_VAR` / `${ENV_VAR}` reference, or a literal value. |
+| `api` | One of `openai-completions`, `openai-responses`, `anthropic-messages`, or `claude-bridge`. The first three match the provider's real HTTP API. `claude-bridge` is currently the only delegated value: it hands the turn to the pi provider whose id equals that api string (the `pi-claude-bridge` extension). Delegation is not generic, because pi only exposes another extension's stream functions under its own provider id. If that provider is not registered in any live session, the backend fails fast and rotation continues. |
+| `input` | Accepted modalities; absent means `["text"]`, and image routing is driven by this field (text-only backends are skipped when a turn carries images), so a delegated backend that serves images needs `"input": ["text","image"]`. |
+| `baseUrl` | Endpoint for the provider. Ignored by delegated (`claude-bridge`) backends, where any placeholder works. |
+| `apiKey` | `$ENV_VAR` / `${ENV_VAR}` reference, or a literal value. Must be non-empty even for delegated backends (use a placeholder like `not-used`). |
 | `model` | The actual model id sent to the provider. |
 | `contextWindow` / `maxTokens` | Caps used for compaction and output limits. |
 | `cost` | Per-1M-token rates (display/telemetry only). |
