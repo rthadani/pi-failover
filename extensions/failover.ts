@@ -587,8 +587,9 @@ function resolveRing(
   modelId: string,
 ): { ring: Backend[]; startIndex: number; setName?: string } {
   // A set name selects that whole set from its first model, mirroring
-  // resolveDefault's sets-before-models precedence.
-  const bySetName = config.sets.find((s) => s.name === modelId);
+  // resolveDefault's sets-before-models precedence. Empty sets are skipped so
+  // the name falls through to model lookup instead of yielding an empty ring.
+  const bySetName = config.sets.find((s) => s.name === modelId && s.models.length > 0);
   if (bySetName) return { ring: bySetName.models, startIndex: 0, setName: bySetName.name };
   for (const set of config.sets) {
     const idx = set.models.findIndex((b) => b.name === modelId);
@@ -737,8 +738,9 @@ export default function (pi: ExtensionAPI) {
   }
   for (const set of config.sets) {
     const head = set.models[0];
-    // Skip when a backend already claims this id; backend ids stay authoritative.
-    if (!head || head.name === set.name) continue;
+    // Skip when a backend in any set already claims this id; backend ids stay
+    // authoritative, including across sets.
+    if (!head || seen.has(set.name)) continue;
     models.push(toModelConfig(head, set.name, `Failover · ${set.name}`, config));
   }
   for (const backend of allBackends) {

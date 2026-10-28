@@ -242,6 +242,50 @@ runCase("CASE 5: set names register as model ids on the set's first model", () =
   );
 });
 
+// Sets win over backends: an id that is both a set name and a backend name in
+// another set must resolve to the set, entered at its first model.
+runCase("CASE 6: a set name beats a same-named backend in another set", () => {
+  const precedenceFixture = join(tmp, "precedence.json");
+  writeFileSync(
+    precedenceFixture,
+    JSON.stringify({
+      maxAttempts: 2,
+      sets: [
+        { name: "alpha", models: [{ ...textOnly, name: "shared-model" }] },
+        {
+          name: "beta",
+          models: [{ ...textOnly, name: "shared-model" }, { ...textOnly, name: "alpha" }],
+        },
+      ],
+    }),
+  );
+  const extPath = join(dirname(fileURLToPath(import.meta.url)), "..", "extensions", "failover.ts");
+  const script = `
+    const ext = (await import(${JSON.stringify(extPath)})).default;
+    let provider;
+    ext({ on() {}, registerProvider: (_n, p) => { provider = p; } });
+    const stream = provider.streamSimple(
+      { id: "alpha", api: "openai-completions", provider: "failover", input: ["text"] },
+      { messages: [{ content: [{ type: "image", data: "x", mimeType: "image/png" }] }] },
+      {},
+    );
+    const events = [];
+    for await (const event of stream) events.push(event);
+    const err = events.find((e) => e.type === "error");
+    console.log(String(err?.error?.errorMessage ?? err?.errorMessage ?? ""));
+  `;
+  const res = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+    cwd: tmp,
+    env: { ...process.env, FAILOVER_CONFIG: precedenceFixture },
+    encoding: "utf8",
+  });
+  const msg = (res.stdout || "").trim();
+  assert(msg !== "", `child produced no error message; stderr:\n${res.stderr}`);
+  assert(msg.includes('in set "alpha"'), `set name should win over the backend: ${msg}`);
+  assert(msg.includes("skipped shared-model"), `ring should be set alpha's models: ${msg}`);
+  assert(!msg.includes("beta"), `id "alpha" resolved into set beta: ${msg}`);
+});
+
 rmSync(tmp, { recursive: true, force: true });
 
 if (failures > 0) {
