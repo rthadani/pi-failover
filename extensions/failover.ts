@@ -15,6 +15,8 @@
  *                                  name), falling back to the first model of the
  *                                  first set when unset or unresolvable
  *   - `failover/<model-name>`    → that model, failing over within its set
+ *   - `failover/<set-name>`      → that set from its first model, failing over
+ *                                  within the set
  *
  * Config (~/.pi/agent/failover.json):
  *   {
@@ -584,6 +586,10 @@ function resolveRing(
   config: FailoverConfig,
   modelId: string,
 ): { ring: Backend[]; startIndex: number; setName?: string } {
+  // A set name selects that whole set from its first model, mirroring
+  // resolveDefault's sets-before-models precedence.
+  const bySetName = config.sets.find((s) => s.name === modelId);
+  if (bySetName) return { ring: bySetName.models, startIndex: 0, setName: bySetName.name };
   for (const set of config.sets) {
     const idx = set.models.findIndex((b) => b.name === modelId);
     if (idx >= 0) return { ring: set.models, startIndex: idx, setName: set.name };
@@ -728,6 +734,12 @@ export default function (pi: ExtensionAPI) {
   const models = [];
   if (first) {
     models.push(toModelConfig(first, "auto", `Auto (failover → ${first.name})`, config));
+  }
+  for (const set of config.sets) {
+    const head = set.models[0];
+    // Skip when a backend already claims this id; backend ids stay authoritative.
+    if (!head || head.name === set.name) continue;
+    models.push(toModelConfig(head, set.name, `Failover · ${set.name}`, config));
   }
   for (const backend of allBackends) {
     models.push(toModelConfig(backend, backend.name, `Failover · ${backend.name}`, config));

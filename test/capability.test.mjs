@@ -2,9 +2,11 @@
 // extensions/failover.ts with fully offline fixtures. The backends use an
 // unset env-var API key ($HARNESS_UNSET_KEY) so resolveApiKey returns "" and
 // the retry loop `continue`s before any network call.
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // Fail fast unless HARNESS_UNSET_KEY is genuinely unset (the design depends on it).
 delete process.env.HARNESS_UNSET_KEY;
@@ -148,6 +150,95 @@ runCase("CASE 3: plain text context leaves the text-only path untouched", async 
   assert(
     !warns.some((w) => w.includes("image input: skipping")),
     `unexpected image-skipping warn on plain text: ${JSON.stringify(warns)}`,
+  );
+});
+
+// Run in a child process: the async cases above are not awaited by this file,
+// so a deterministic case must own its own process (same pattern as the roster
+// harness's spawnSync case).
+runCase("CASE 4: a set-name model id enters that set from its first model, staying inside it", () => {
+  const setsFixture = join(tmp, "sets.json");
+  writeFileSync(
+    setsFixture,
+    JSON.stringify({
+      maxAttempts: 2,
+      sets: [
+        { name: "premium", models: [vision] },
+        {
+          name: "budget",
+          models: [
+            { ...textOnly, name: "text-only-a" },
+            { ...textOnly, name: "text-only-b" },
+          ],
+        },
+      ],
+    }),
+  );
+  const extPath = join(dirname(fileURLToPath(import.meta.url)), "..", "extensions", "failover.ts");
+  const script = `
+    const ext = (await import(${JSON.stringify(extPath)})).default;
+    let provider;
+    ext({ on() {}, registerProvider: (_n, p) => { provider = p; } });
+    const stream = provider.streamSimple(
+      { id: "budget", api: "openai-completions", provider: "failover", input: ["text"] },
+      { messages: [{ content: [{ type: "image", data: "x", mimeType: "image/png" }] }] },
+      {},
+    );
+    const events = [];
+    for await (const event of stream) events.push(event);
+    const err = events.find((e) => e.type === "error");
+    console.log(String(err?.error?.errorMessage ?? err?.errorMessage ?? ""));
+  `;
+  const res = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+    cwd: tmp,
+    env: { ...process.env, FAILOVER_CONFIG: setsFixture },
+    encoding: "utf8",
+  });
+  const msg = (res.stdout || "").trim();
+  assert(msg !== "", `child produced no error message; stderr:\n${res.stderr}`);
+  assert(msg.includes('in set "budget"'), `model id "budget" did not resolve to the set: ${msg}`);
+  assert(
+    msg.includes("skipped text-only-a, text-only-b"),
+    `ring should be the set starting at its first model: ${msg}`,
+  );
+  assert(!msg.includes("vision-b"), `ring escaped into another set: ${msg}`);
+});
+
+runCase("CASE 5: set names register as model ids on the set's first model", () => {
+  const registrationFixture = join(tmp, "registration.json");
+  writeFileSync(
+    registrationFixture,
+    JSON.stringify({
+      maxAttempts: 2,
+      sets: [
+        { name: "budget", models: [{ ...textOnly, name: "text-only-a" }, vision] },
+        { name: "text-only-b", models: [{ ...textOnly, name: "text-only-b" }] },
+      ],
+    }),
+  );
+  let provider;
+  process.env.FAILOVER_CONFIG = registrationFixture;
+  try {
+    provider = loadExtension();
+  } finally {
+    process.env.FAILOVER_CONFIG = fixturePath;
+  }
+  const byId = new Map();
+  for (const m of provider.models) byId.set(m.id, [...(byId.get(m.id) ?? []), m]);
+  const budget = byId.get("budget");
+  assert(budget?.length === 1, `"budget" should be registered once, got ${budget?.length ?? 0}`);
+  assert(
+    budget[0].baseUrl === textOnly.baseUrl,
+    `"budget" should carry its first model's config, got baseUrl ${budget[0].baseUrl}`,
+  );
+  const collision = byId.get("text-only-b");
+  assert(
+    collision?.length === 1,
+    `a set name equal to a backend id must not duplicate it, got ${collision?.length ?? 0}`,
+  );
+  assert(
+    collision[0].name === "Failover · text-only-b",
+    `backend id should stay authoritative, got name ${collision[0].name}`,
   );
 });
 
