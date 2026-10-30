@@ -1,48 +1,122 @@
 name: Publish to npm
 
+# Publishes @rthadani/pi-failover when a v* tag is pushed.
+#
+# Auth is npm Trusted Publishing (OIDC): no NPM_TOKEN, no OTP. One-time setup
+# on npmjs.com under the package's Settings -> Trusted Publisher:
+#   Repository: rthadani/pi-failover
+#   Workflow:   publish.yml
+#   Environment: (leave empty)
+# Renaming this file breaks that match and npm will reject the publish.
+#
+# Release flow:
+#   npm version minor        # bumps package.json, commits, creates vX.Y.Z tag
+#   git push --follow-tags   # this workflow publishes
+# The version is checked against the tag and against npm itself, so a tag can
+# never publish the wrong version or re-publish an existing one.
+
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
+      tag:
+        description: "Existing tag to publish (e.g. v1.2.0). Empty uses the selected branch."
+        required: false
+        type: string
       dry_run:
-        description: 'Run npm publish with --dry-run and upload nothing'
+        description: "Dry run: install + test, upload nothing"
         type: boolean
         default: true
 
 permissions:
   contents: read
-  id-token: write
+  id-token: write # the OIDC token trusted publishing exchanges for npm auth
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve ref
+        id: ref
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          ref="${INPUT_TAG:-$REF_NAME}"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ref.outputs.ref }}
+
+      # No registry-url on purpose. With trusted publishing there is no
+      # NODE_AUTH_TOKEN, but setup-node's generated .npmrc would still contain
+      # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`. npm treats the
+      # empty value as "auth already supplied", skips the OIDC exchange, and
+      # fails with ENEEDAUTH. npm defaults to registry.npmjs.org anyway.
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
-      - name: Verify tag matches package version
-        if: startsWith(github.ref, 'refs/tags/')
+          node-version: 24
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Test
         run: |
+          set -euo pipefail
+          for f in test/*.test.mjs; do
+            echo "::group::$f"
+            node "$f"
+            echo "::endgroup::"
+          done
+
+      - name: Verify tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/') || inputs.tag != ''
+        env:
+          REF: ${{ steps.ref.outputs.ref }}
+        run: |
+          set -euo pipefail
+          tag_version="${REF#refs/tags/}"
+          tag_version="${tag_version#v}"
           pkg_version="$(node -p "require('./package.json').version")"
-          tag_version="${GITHUB_REF_NAME#v}"
+          echo "tag=$tag_version package.json=$pkg_version"
           if [ "$pkg_version" != "$tag_version" ]; then
-            echo "Tag '${GITHUB_REF_NAME}' (v${tag_version}) does not match package version '${pkg_version}'."
+            echo "::error::Tag '$REF' does not match package.json version '$pkg_version'."
+            echo "Run 'npm version $tag_version' and push the tag again."
             exit 1
           fi
-      - name: Run tests
-        run: node test/capability.test.mjs
-      - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@^11.5.1
-      - name: Publish to npm
+
+      - name: Verify version is not already published
         run: |
-          dry_run="${{ inputs.dry_run }}"
-          if [ "$dry_run" = "true" ]; then
-            echo "dry run: no package will be uploaded"
+          set -euo pipefail
+          pkg="$(node -p "require('./package.json').name")"
+          ver="$(node -p "require('./package.json').version")"
+          if npm view "$pkg@$ver" version >/dev/null 2>&1; then
+            echo "::error::$pkg@$ver already exists on npm. Bump the version first."
+            exit 1
+          fi
+
+      - name: Upgrade npm (trusted publishing needs >= 11.5.1)
+        run: |
+          set -euo pipefail
+          npm install -g 'npm@^11.5.1'
+          echo "node $(node -v) / npm $(npm -v)"
+
+      - name: Publish
+        env:
+          # push on a tag -> publish; manual dispatch -> honour dry_run (default true)
+          DRY_RUN: ${{ github.event_name != 'push' && inputs.dry_run || 'false' }}
+        run: |
+          set -euo pipefail
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "dry run: nothing will be uploaded"
             npm publish --access public --dry-run
           else
-            npm publish --access public
+            npm publish --access public --provenance
           fi
