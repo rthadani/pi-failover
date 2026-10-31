@@ -3,10 +3,12 @@ name: Publish to npm
 # Publishes @rthadani/pi-failover when a v* tag is pushed.
 #
 # Auth is npm Trusted Publishing (OIDC): no NPM_TOKEN, no OTP. One-time setup
-# on npmjs.com under the package's Settings -> Trusted Publisher:
-#   Repository: rthadani/pi-failover
-#   Workflow:   publish.yml
-#   Environment: (leave empty)
+# on npmjs.com under the package's Settings -> Trusted Publisher. The form has
+# separate fields, so enter exactly:
+#   Organization or user: rthadani
+#   Repository:           pi-failover   (name only, NOT rthadani/pi-failover)
+#   Workflow filename:    publish.yml   (filename only, not a path)
+#   Environment name:     (leave empty; this workflow sets no environment)
 # Renaming this file breaks that match and npm will reject the publish.
 #
 # Release flow:
@@ -102,6 +104,18 @@ jobs:
             exit 1
           fi
 
+      # npm silently swallows OIDC failures and reports only ENEEDAUTH, so
+      # surface the one condition we can check locally: whether GitHub actually
+      # exposed the token endpoint (it only does when id-token: write is granted).
+      - name: OIDC preflight
+        run: |
+          set -euo pipefail
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "::error::GitHub did not expose the OIDC token endpoint; this job lacks id-token: write."
+            exit 1
+          fi
+          echo "GitHub OIDC token endpoint is available."
+
       - name: Upgrade npm (trusted publishing needs >= 11.5.1)
         run: |
           set -euo pipefail
@@ -118,5 +132,7 @@ jobs:
             echo "dry run: nothing will be uploaded"
             npm publish --access public --dry-run
           else
-            npm publish --access public --provenance
+            # verbose is deliberate: it prints npm's token-exchange rejection,
+            # which is hidden at the default log level.
+            npm publish --access public --provenance --loglevel verbose
           fi
